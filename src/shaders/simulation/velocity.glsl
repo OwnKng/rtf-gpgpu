@@ -2,6 +2,7 @@ uniform float uTime;
 uniform float delta;
 uniform vec3 uMouse;
 uniform sampler2D uLifeTexture;
+uniform sampler2D uStartingVelocity;
 
 vec4 permute(vec4 x) {
     return mod(((x*34.0)+1.0)*x, 289.0);
@@ -115,22 +116,18 @@ void main()	{
     float index = texture2D(texturePosition, uv).w;
     vec3 velocity = texture2D(textureVelocity, uv).xyz;
 
+    float lifespan = texture2D(uLifeTexture, vec2(uv)).x;
+    float maxSpeed = texture2D(uLifeTexture, vec2(uv)).y;
+    float maxForce = texture2D(uLifeTexture, vec2(uv)).z;
+
     vec3 acceleration = vec3(0.0);
     
-    float maxSpeed = 0.5;
-    float maxForce = 1.0; 
-
-    vec3 gravity = vec3(0.0, -0.1, 0.0);
-    acceleration =+ applyForce(gravity, acceleration, maxForce);
-
     velocity = updateVelocity(acceleration, velocity, maxSpeed);
 
     float distanceFromOrigin = length(position - uMouse);
-    float lifespan = texture2D(uLifeTexture, vec2(uv)).x;
-
 
     if(distanceFromOrigin > lifespan) {
-        velocity = randomVector(uv);
+        velocity = texture2D(uStartingVelocity, uv).xyz;
     }
     
     gl_FragColor = vec4(velocity, 1.0);

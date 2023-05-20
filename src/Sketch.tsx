@@ -8,20 +8,32 @@ import velocity from "./shaders/simulation/velocity.glsl"
 
 import fragment from "./shaders/particles/fragment.glsl"
 import vertex from "./shaders/particles/vertex.glsl"
+import { useTexture } from "@react-three/drei"
+
+import image from "./assets/small.png"
 
 const WIDTH = 256
 
-const maxSpeed = 0.01
-const maxForce = 0.25
+const maxSpeed = 0.5
+const maxForce = 1.0
+
+const startingVelocity = new Array(WIDTH * WIDTH)
+  .fill(0)
+  .flatMap((_) => [
+    (Math.random() * 2 - 1) * Math.random(),
+    (Math.random() * 2 - 1) * Math.random(),
+    0,
+    0,
+  ])
 
 const createRandomVelocity = (texture: THREE.DataTexture) => {
   const data = texture.image.data
 
   for (let i = 0; i < data.length; i += 4) {
-    data[i + 0] = (Math.random() * 2 - 1) * Math.random()
-    data[i + 1] = (Math.random() * 2 - 1) * Math.random()
-    data[i + 2] = 0
-    data[i + 3] = 0
+    data[i + 0] = startingVelocity[i + 0]
+    data[i + 1] = startingVelocity[i + 1]
+    data[i + 2] = startingVelocity[i + 2]
+    data[i + 3] = startingVelocity[i + 3]
   }
 }
 
@@ -29,7 +41,7 @@ const fillLifeSpanTexture = (width: number) =>
   Float32Array.from(
     new Array(width * width)
       .fill(0)
-      .flatMap((_) => [10 + (Math.random() - 0.5) * 5, 0, 0, 0])
+      .flatMap((_) => [10 + (Math.random() - 0.5) * 5, maxSpeed, maxForce, 0])
   )
 
 const fillPositionTexture = (texture: THREE.DataTexture) => {
@@ -45,18 +57,31 @@ const fillPositionTexture = (texture: THREE.DataTexture) => {
 
 const Sketch = () => {
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
-  const { gl } = useThree()
+  const { gl, viewport } = useThree()
+
+  const texture = useTexture(image)
+  const width = texture.image.width
+  const height = texture.image.height
+
+  const imageAspect = width / height
+  const aspect = viewport.width / viewport.height
 
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0.0 },
       positionTexture: { value: null },
       uMouse: { value: new THREE.Vector3() },
+      uTexture: { value: texture },
+      uTextureSize: {
+        value: new THREE.Vector2(width, height),
+      },
+      uResolution: {
+        value: new THREE.Vector2(viewport.width, viewport.height),
+      },
+      uAspect: { value: new THREE.Vector2(imageAspect / aspect, 1) },
     }),
-    []
+    [texture, width, height]
   )
-
-  const { viewport } = useThree()
 
   //_ Create the fbo and simulation data
   const [gpuCompute, positionTexture, velocityTexture] = useMemo(() => {
@@ -106,6 +131,19 @@ const Sketch = () => {
 
     positionTexture.material.uniforms.uLifeTexture = { value: dataTextureLife }
     velocityTexture.material.uniforms.uLifeTexture = { value: dataTextureLife }
+
+    // Initial velocity
+    const dataTextureInitialVelocity = new THREE.DataTexture(
+      Float32Array.from(startingVelocity),
+      WIDTH,
+      WIDTH,
+      THREE.RGBAFormat,
+      THREE.FloatType
+    )
+    dataTextureInitialVelocity.needsUpdate = true
+    velocityTexture.material.uniforms.uStartingVelocity = {
+      value: dataTextureInitialVelocity,
+    }
 
     positionTexture.material.uniforms.uMouse = { value: new THREE.Vector3() }
 
@@ -183,8 +221,6 @@ const Sketch = () => {
           uniforms={uniforms}
           vertexShader={vertex}
           fragmentShader={fragment}
-          blending={THREE.AdditiveBlending}
-          transparent={true}
         />
       </instancedMesh>
     </>

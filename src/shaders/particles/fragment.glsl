@@ -1,17 +1,17 @@
-
+uniform sampler2D uTexture; 
 varying vec2 vuv;
 varying float vLength; 
+uniform vec2 uAspect;
+uniform vec2 uTextureSize; 
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
 }
 
 void main() {
-    vec3 colorOne = vec3(235.0/255.0, 64.0/255.0, 52.0/255.0);
-    vec3 colorTwo = vec3(52.0/255.0, 168.0/255.0, 235.0/255.0); 
-    float alpha = 1.0 - map(vLength, 0.0, 8.0, 0.0, 1.0);
+  vec3 _texture = texture2D(uTexture, vuv).rgb;
+  float strength = _texture.r * 0.21 + _texture.g * 0.71 + _texture.b * 0.07;
 
-    vec3 color = mix(colorOne, colorTwo, alpha);
 
-    gl_FragColor = vec4(color, alpha);
+  gl_FragColor = vec4(vec3(1.0), strength); 
 }
