@@ -5,30 +5,14 @@ import * as THREE from "three"
 
 import position from "./shaders/simulation/position.glsl"
 import velocity from "./shaders/simulation/velocity.glsl"
-import acceleration from "./shaders/simulation/acceleration.glsl"
 
 import fragment from "./shaders/particles/fragment.glsl"
 import vertex from "./shaders/particles/vertex.glsl"
 
-const WIDTH = 250
-const DEPTH = 4
+const WIDTH = 256
 
-const r = 5
-
-const maxSpeed = 0.05
+const maxSpeed = 0.01
 const maxForce = 0.25
-
-const fillDataTexture = (texture: THREE.DataTexture) => {
-  const data = texture.image.data
-
-  for (let i = 0; i < data.length; i += 4) {
-    data[i + 0] = 0
-    data[i + 1] = 0
-    data[i + 2] = 0
-    // max force
-    data[i + 3] = maxForce + (Math.random() - 0.5) * 0.05
-  }
-}
 
 const createRandomVelocity = (texture: THREE.DataTexture) => {
   const data = texture.image.data
@@ -37,20 +21,25 @@ const createRandomVelocity = (texture: THREE.DataTexture) => {
     data[i + 0] = (Math.random() * 2 - 1) * Math.random()
     data[i + 1] = (Math.random() * 2 - 1) * Math.random()
     data[i + 2] = 0
-    // max speed
-    data[i + 3] = maxSpeed + (Math.random() - 0.5) * 0.01
+    data[i + 3] = 0
   }
 }
 
-const fillPositionTexture = (texture: THREE.DataTexture, size: number) => {
+const fillLifeSpanTexture = (width: number) =>
+  Float32Array.from(
+    new Array(width * width)
+      .fill(0)
+      .flatMap((_) => [10 + (Math.random() - 0.5) * 5, 0, 0, 0])
+  )
+
+const fillPositionTexture = (texture: THREE.DataTexture) => {
   const data = texture.image.data
 
   for (let i = 0; i < data.length; i += 4) {
     data[i + 0] = 0
     data[i + 1] = 0
-    data[i + 2] = 6 + Math.random()
-    // lifespan
-    data[i + 3] = (Math.random() - 0.5) * 100
+    data[i + 2] = 0
+    data[i + 3] = 0
   }
 }
 
@@ -62,28 +51,32 @@ const Sketch = () => {
     () => ({
       uTime: { value: 0.0 },
       positionTexture: { value: null },
+      uMouse: { value: new THREE.Vector3() },
     }),
     []
   )
+
+  const { viewport } = useThree()
 
   //_ Create the fbo and simulation data
   const [gpuCompute, positionTexture, velocityTexture] = useMemo(() => {
     const gpuRender = new GPUComputationRenderer(WIDTH, WIDTH, gl)
 
-    const dataTextureAcceleration = gpuRender.createTexture()
-    createRandomVelocity(dataTextureAcceleration)
-
     const dataTexturePosition = gpuRender.createTexture()
-    fillPositionTexture(dataTexturePosition, DEPTH)
+    fillPositionTexture(dataTexturePosition)
 
     const dataTextureVelocity = gpuRender.createTexture()
-    fillDataTexture(dataTextureVelocity)
+    createRandomVelocity(dataTextureVelocity)
 
-    const accelerationTexture = gpuRender.addVariable(
-      "textureAcceleration",
-      acceleration,
-      dataTextureAcceleration
+    const lifespan = fillLifeSpanTexture(WIDTH)
+    const dataTextureLife = new THREE.DataTexture(
+      lifespan,
+      WIDTH,
+      WIDTH,
+      THREE.RGBAFormat,
+      THREE.FloatType
     )
+    dataTextureLife.needsUpdate = true
 
     const positionTexture = gpuRender.addVariable(
       "texturePosition",
@@ -99,19 +92,11 @@ const Sketch = () => {
     gpuRender.setVariableDependencies(positionTexture, [
       positionTexture,
       velocityTexture,
-      accelerationTexture,
     ])
 
     gpuRender.setVariableDependencies(velocityTexture, [
       velocityTexture,
       positionTexture,
-      accelerationTexture,
-    ])
-
-    gpuRender.setVariableDependencies(accelerationTexture, [
-      accelerationTexture,
-      positionTexture,
-      velocityTexture,
     ])
 
     positionTexture.material.uniforms.uTime = { value: 0.0 }
@@ -119,11 +104,10 @@ const Sketch = () => {
     positionTexture.material.uniforms.delta = { value: 0.0 }
     velocityTexture.material.uniforms.delta = { value: 0.0 }
 
-    accelerationTexture.material.uniforms.repeller = {
-      value: new THREE.Vector3(0, 0, 0),
-    }
+    positionTexture.material.uniforms.uLifeTexture = { value: dataTextureLife }
+    velocityTexture.material.uniforms.uLifeTexture = { value: dataTextureLife }
 
-    accelerationTexture.material.uniforms.r = { value: r }
+    positionTexture.material.uniforms.uMouse = { value: new THREE.Vector3() }
 
     positionTexture.wrapS = THREE.RepeatWrapping
     positionTexture.wrapT = THREE.RepeatWrapping
@@ -170,8 +154,17 @@ const Sketch = () => {
 
   return (
     <>
+      <mesh
+        onPointerMove={(e) => {
+          positionTexture.material.uniforms.uMouse.value = e.point
+          materialRef.current.uniforms.uMouse.value = e.point
+        }}
+      >
+        <planeGeometry args={[viewport.width, viewport.height]} />
+        <meshBasicMaterial transparent opacity={0} />
+      </mesh>
       <instancedMesh args={[undefined, undefined, WIDTH * WIDTH]}>
-        <boxGeometry args={[0.01, 0.01, 0.01]}>
+        <boxGeometry args={[0.1, 0.1, 0.1]}>
           <instancedBufferAttribute
             attach='attributes-offset'
             array={positions}
@@ -191,7 +184,7 @@ const Sketch = () => {
           vertexShader={vertex}
           fragmentShader={fragment}
           blending={THREE.AdditiveBlending}
-          transparent
+          transparent={true}
         />
       </instancedMesh>
     </>
