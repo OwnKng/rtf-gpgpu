@@ -7,8 +7,6 @@ import position from "./shaders/simulation/position.glsl"
 import velocity from "./shaders/simulation/velocity.glsl"
 
 import vertex from "./shaders/particles/vertex.glsl"
-import matcap from "./assets/matcap.png"
-import { useTexture } from "@react-three/drei"
 
 const WIDTH = 80
 
@@ -64,17 +62,13 @@ const Sketch = () => {
   const uniforms = useMemo(
     () =>
       THREE.UniformsUtils.merge([
-        THREE.ShaderLib["matcap"].uniforms,
+        THREE.ShaderLib["phong"].uniforms,
         {
-          uTime: { value: 0.0 },
           positionTexture: { value: null },
-          uMouse: { value: new THREE.Vector3() },
         },
       ]),
     []
   )
-
-  const texture = useTexture(matcap)
 
   //_ Create the fbo and simulation data
   const [gpuCompute, positionTexture, velocityTexture] = useMemo(() => {
@@ -188,17 +182,28 @@ const Sketch = () => {
   useLayoutEffect(() => {
     const material = materialRef.current
 
-    material.matcap = true
-    material.uniforms.matcap.value = texture
-    material.uniformsNeedUpdate = true
-    material.depthTest = true
-    material.depthWrite = true
+    material.lights = true
+    material.color = new THREE.Color(0x42b6f5)
+    material.specular = new THREE.Color(0x111111)
+    material.shininess = 100
+
+    // Sets the uniforms with the material values
+    material.uniforms["diffuse"].value = material.color
+    material.uniforms["specular"].value = material.specular
+    material.uniforms["shininess"].value = Math.max(material.shininess, 1e-4)
+    material.uniforms["opacity"].value = material.opacity
+
     material.needsUpdate = true
-  }, [texture])
+
+    // Defines
+    material.defines.WIDTH = WIDTH.toFixed(1)
+    material.defines.BOUNDS = WIDTH.toFixed(1)
+  }, [materialRef])
 
   return (
     <>
       <mesh
+        receiveShadow
         onPointerMove={(e) => {
           velocityTexture.material.uniforms.uMouse.value = e.point
         }}
@@ -207,7 +212,7 @@ const Sketch = () => {
         <meshBasicMaterial transparent opacity={0} />
       </mesh>
       <instancedMesh args={[undefined, undefined, WIDTH * WIDTH]}>
-        <boxGeometry args={[0.05, 0.05, 0.05]}>
+        <boxGeometry args={[0.08, 0.08, 0.08]}>
           <instancedBufferAttribute
             attach='attributes-offset'
             array={positions}
@@ -225,10 +230,8 @@ const Sketch = () => {
           ref={materialRef}
           uniforms={uniforms}
           vertexShader={vertex}
-          fragmentShader={THREE.ShaderChunk["meshmatcap_frag"]}
-          transparent
+          fragmentShader={THREE.ShaderChunk["meshphong_frag"]}
           blending={THREE.AdditiveBlending}
-          opacity={0.5}
         />
       </instancedMesh>
     </>

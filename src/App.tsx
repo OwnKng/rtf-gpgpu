@@ -1,7 +1,6 @@
 import "./App.css"
 import Sketch from "./Sketch"
 import { Canvas } from "@react-three/fiber"
-import { OrbitControls } from "@react-three/drei"
 
 function App() {
   return (
@@ -11,7 +10,9 @@ function App() {
           position: [0, 0, 15],
         }}
       >
-        <OrbitControls />
+        <ambientLight intensity={0.2} />
+        <pointLight position={[0, 1, 5]} intensity={1.0} />
+
         <Sketch />
       </Canvas>
     </div>
