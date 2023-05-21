@@ -8,7 +8,7 @@ import velocity from "./shaders/simulation/velocity.glsl"
 
 import vertex from "./shaders/particles/vertex.glsl"
 
-const WIDTH = 80
+const WIDTH = 50
 
 const maxSpeed = 1.0
 const maxForce = 0.5
