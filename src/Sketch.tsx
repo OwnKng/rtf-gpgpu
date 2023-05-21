@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react"
+import { useLayoutEffect, useMemo, useRef } from "react"
 import { GPUComputationRenderer } from "three/examples/jsm/misc/GPUComputationRenderer.js"
 import { useFrame, useThree } from "@react-three/fiber"
 import * as THREE from "three"
@@ -6,16 +6,14 @@ import * as THREE from "three"
 import position from "./shaders/simulation/position.glsl"
 import velocity from "./shaders/simulation/velocity.glsl"
 
-import fragment from "./shaders/particles/fragment.glsl"
 import vertex from "./shaders/particles/vertex.glsl"
+import matcap from "./assets/matcap.png"
 import { useTexture } from "@react-three/drei"
 
-import image from "./assets/small.png"
+const WIDTH = 80
 
-const WIDTH = 256
-
-const maxSpeed = 0.5
-const maxForce = 1.0
+const maxSpeed = 1.0
+const maxForce = 0.5
 
 const startingVelocity = new Array(WIDTH * WIDTH)
   .fill(0)
@@ -44,12 +42,16 @@ const fillLifeSpanTexture = (width: number) =>
       .flatMap((_) => [10 + (Math.random() - 0.5) * 5, maxSpeed, maxForce, 0])
   )
 
-const fillPositionTexture = (texture: THREE.DataTexture) => {
+const fillPositionTexture = (
+  texture: THREE.DataTexture,
+  width: number,
+  height: number
+) => {
   const data = texture.image.data
 
   for (let i = 0; i < data.length; i += 4) {
-    data[i + 0] = 0
-    data[i + 1] = 0
+    data[i + 0] = (Math.random() - 0.5) * width
+    data[i + 1] = (Math.random() - 0.5) * height
     data[i + 2] = 0
     data[i + 3] = 0
   }
@@ -59,36 +61,27 @@ const Sketch = () => {
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
   const { gl, viewport } = useThree()
 
-  const texture = useTexture(image)
-  const width = texture.image.width
-  const height = texture.image.height
-
-  const imageAspect = width / height
-  const aspect = viewport.width / viewport.height
-
   const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0.0 },
-      positionTexture: { value: null },
-      uMouse: { value: new THREE.Vector3() },
-      uTexture: { value: texture },
-      uTextureSize: {
-        value: new THREE.Vector2(width, height),
-      },
-      uResolution: {
-        value: new THREE.Vector2(viewport.width, viewport.height),
-      },
-      uAspect: { value: new THREE.Vector2(imageAspect / aspect, 1) },
-    }),
-    [texture, width, height]
+    () =>
+      THREE.UniformsUtils.merge([
+        THREE.ShaderLib["matcap"].uniforms,
+        {
+          uTime: { value: 0.0 },
+          positionTexture: { value: null },
+          uMouse: { value: new THREE.Vector3() },
+        },
+      ]),
+    []
   )
+
+  const texture = useTexture(matcap)
 
   //_ Create the fbo and simulation data
   const [gpuCompute, positionTexture, velocityTexture] = useMemo(() => {
     const gpuRender = new GPUComputationRenderer(WIDTH, WIDTH, gl)
 
     const dataTexturePosition = gpuRender.createTexture()
-    fillPositionTexture(dataTexturePosition)
+    fillPositionTexture(dataTexturePosition, viewport.width, viewport.height)
 
     const dataTextureVelocity = gpuRender.createTexture()
     createRandomVelocity(dataTextureVelocity)
@@ -145,17 +138,21 @@ const Sketch = () => {
       value: dataTextureInitialVelocity,
     }
 
-    positionTexture.material.uniforms.uMouse = { value: new THREE.Vector3() }
+    velocityTexture.material.uniforms.uMouse = { value: new THREE.Vector3() }
 
     positionTexture.wrapS = THREE.RepeatWrapping
     positionTexture.wrapT = THREE.RepeatWrapping
     velocityTexture.wrapS = THREE.RepeatWrapping
     velocityTexture.wrapT = THREE.RepeatWrapping
 
+    positionTexture.material.uniforms.uTextureSize = {
+      value: new THREE.Vector3(viewport.width, viewport.height, 5),
+    }
+
     gpuRender.init()
 
     return [gpuRender, positionTexture, velocityTexture]
-  }, [gl])
+  }, [gl, viewport])
 
   // Buffer attributes for the presentational layer
   const [positions, pIndex] = useMemo(
@@ -185,24 +182,32 @@ const Sketch = () => {
     materialRef.current.uniforms.positionTexture.value =
       gpuCompute.getCurrentRenderTarget(positionTexture).texture
 
-    materialRef.current.uniforms.uTime.value = clock.getElapsedTime()
-
     materialRef.current.uniformsNeedUpdate = true
   })
+
+  useLayoutEffect(() => {
+    const material = materialRef.current
+
+    material.matcap = true
+    material.uniforms.matcap.value = texture
+    material.uniformsNeedUpdate = true
+    material.depthTest = true
+    material.depthWrite = true
+    material.needsUpdate = true
+  }, [texture])
 
   return (
     <>
       <mesh
         onPointerMove={(e) => {
-          positionTexture.material.uniforms.uMouse.value = e.point
-          materialRef.current.uniforms.uMouse.value = e.point
+          velocityTexture.material.uniforms.uMouse.value = e.point
         }}
       >
         <planeGeometry args={[viewport.width, viewport.height]} />
         <meshBasicMaterial transparent opacity={0} />
       </mesh>
       <instancedMesh args={[undefined, undefined, WIDTH * WIDTH]}>
-        <boxGeometry args={[0.1, 0.1, 0.1]}>
+        <boxGeometry args={[0.05, 0.05, 0.05]}>
           <instancedBufferAttribute
             attach='attributes-offset'
             array={positions}
@@ -220,7 +225,10 @@ const Sketch = () => {
           ref={materialRef}
           uniforms={uniforms}
           vertexShader={vertex}
-          fragmentShader={fragment}
+          fragmentShader={THREE.ShaderChunk["meshmatcap_frag"]}
+          transparent
+          blending={THREE.AdditiveBlending}
+          opacity={0.5}
         />
       </instancedMesh>
     </>

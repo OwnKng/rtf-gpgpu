@@ -1,17 +1,17 @@
 import "./App.css"
 import Sketch from "./Sketch"
 import { Canvas } from "@react-three/fiber"
+import { OrbitControls } from "@react-three/drei"
 
 function App() {
   return (
     <div className='App'>
       <Canvas
-        orthographic
         camera={{
           position: [0, 0, 15],
-          zoom: 30,
         }}
       >
+        <OrbitControls />
         <Sketch />
       </Canvas>
     </div>

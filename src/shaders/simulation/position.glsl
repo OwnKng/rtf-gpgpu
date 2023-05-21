@@ -1,9 +1,12 @@
 uniform float uTime;
 uniform float delta;
-uniform vec3 uMouse; 
 uniform sampler2D uLifeTexture;
+uniform vec3 uTextureSize; 
 
 void main()	{
+    float width = uTextureSize.x; 
+    float height = uTextureSize.y;
+    float depth = uTextureSize.z;
 
 	float r = 10.0; 
 
@@ -15,11 +18,32 @@ void main()	{
 
 	float lifespan = texture2D(uLifeTexture, vec2(uv)).x;
 
-    float distanceFromOrigin = length(position - uMouse);
 
-    if(distanceFromOrigin > lifespan) {
-        position = uMouse; 
-    } 
+    // check the position relative to the voundary
+    if (position.x < -width * 0.5) {
+        position.x = width * 0.5; 
+    }
+
+    if (position.x > width * 0.5) {
+        position.x = -width * 0.5; 
+    }
+
+    if (position.y < -height * 0.5) {
+        position.y = height * 0.5; 
+    }
+
+    if (position.y > height * 0.5) {
+        position.y = -height * 0.5; 
+    }
+
+    if (position.z < -depth * 0.5) {
+        position.z = depth * 0.5; 
+    }
+
+    if (position.z > depth * 0.5) {
+        position.z = -depth * 0.5; 
+    }
+
     
     gl_FragColor = vec4(position + velocity * delta * 15.0, 1.0);
 }

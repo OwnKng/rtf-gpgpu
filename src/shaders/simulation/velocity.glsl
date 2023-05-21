@@ -78,12 +78,116 @@ vec3 seek(vec3 target, vec3 position, vec3 velocity, bool arrival, float maxSpee
     return steer;
 }
 
-vec3 arrive (vec3 target, vec3 position, vec3 velocity, float maxSpeed, float maxForce) {
+vec3 arrive(vec3 target, vec3 position, vec3 velocity, float maxSpeed, float maxForce) {
     return seek(target, position, velocity, true, maxSpeed, maxForce);
 }
 
-vec3 flee (vec3 target, vec3 position, vec3 velocity, float maxSpeed, float maxForce) {
+vec3 flee(vec3 target, vec3 position, vec3 velocity, float maxSpeed, float maxForce) {
     return seek(target, position, velocity, false, maxSpeed, maxForce) * -1.0;
+}
+
+vec3 separate(vec3 position, vec3 velocity, float maxSpeed, float maxForce, float width, float height) {
+    vec3 steer = vec3(0.0);
+    vec3 sum = vec3(0.0);
+
+    float count = 0.0;
+    float desiredSeparation = 0.5;
+
+    for(float y = 0.0; y < height; y++) {
+        for(float x = 0.0; x < width; x++) {
+            vec2 ref = vec2(x + 0.5, y + 0.5) / resolution.xy;
+            vec3 boidPosition = texture2D(texturePosition, ref).xyz;
+
+            float d = distance(position, boidPosition);
+
+            if(d > 0.0 && d < desiredSeparation) {
+                vec3 diff = position - boidPosition;
+                diff = normalize(diff);
+                diff /= d;
+                sum += diff;
+                count++;
+            }
+        }
+    }
+
+    if(count > 0.0) {
+        sum /= count;
+        sum = normalize(sum);
+        sum *= maxSpeed;
+        steer = sum - velocity;
+        if(length(steer) > maxForce) {
+            steer = normalize(steer) * maxForce;
+        }
+    }
+
+    return steer;
+}
+
+vec3 align (vec3 position, vec3 velocity, float maxSpeed, float maxForce, float width, float height) {
+    vec3 steer = vec3(0.0);
+    vec3 sum = vec3(0.0);
+
+    float count = 0.0;
+    float neighborhoodDistance = 1.0; 
+
+    for(float y = 0.0; y < height; y++) {
+        for(float x = 0.0; x < width; x++) {
+            vec2 ref = vec2(x + 0.5, y + 0.5) / resolution.xy;
+            vec3 boidPosition = texture2D(texturePosition, ref).xyz;
+
+            float d = distance(position, boidPosition);
+
+            if(d > 0.0 && d < neighborhoodDistance) {
+                vec3 boidVelocity = texture2D(textureVelocity, ref).xyz;
+                sum += boidVelocity;
+                count++;
+            }
+        }
+    }
+
+    if(count > 0.0) {
+        sum /= count;
+        sum = normalize(sum);
+        sum *= maxSpeed;
+        steer = sum - velocity;
+        if(length(steer) > maxForce) {
+            steer = normalize(steer) * maxForce;
+        }
+    }
+
+    return steer;
+}
+
+vec3 cohere(vec3 position, vec3 velocity, float maxSpeed, float maxForce, float width, float height) {
+    vec3 steer = vec3(0.0);
+    vec3 sum = vec3(0.0);
+
+    float count = 0.0;
+    float neighborhoodDistance = 1.0;
+
+    float numberOfBoids = 0.0; 
+
+    for(float y = 0.0; y < height; y++) {
+        for(float x = 0.0; x < width; x++) {
+            vec2 ref = vec2(x + 0.5, y + 0.5) / resolution.xy;
+            vec3 boidPosition = texture2D(texturePosition, ref).xyz;
+
+            float d = distance(position, boidPosition);
+            numberOfBoids ++; 
+
+            if(d > 0.0 && d < neighborhoodDistance) {
+                sum += boidPosition;
+                count++;
+            }
+        }
+    }
+
+    if(count > 0.0) {
+        sum /= numberOfBoids;
+        steer = seek(sum, position, velocity, false, maxSpeed, maxForce);
+    }
+
+    return steer;
 }
 
 vec3 applyForce(vec3 force, vec3 acceleration, float maxForce) {
@@ -92,7 +196,6 @@ vec3 applyForce(vec3 force, vec3 acceleration, float maxForce) {
     }
     return acceleration + force;
 }
-
 
 vec3 updateVelocity(vec3 acceleration, vec3 velocity, float maxSpeed) {
     vec3 newVelocity = velocity + acceleration * delta;
@@ -111,6 +214,9 @@ vec3 randomVector(vec2 co) {
 }
 
 void main()	{
+    float width = resolution.x;
+    float height = resolution.y;
+
     vec2 uv = gl_FragCoord.xy / resolution.xy;
     vec3 position = texture2D(texturePosition, uv).xyz;
     float index = texture2D(texturePosition, uv).w;
@@ -121,14 +227,26 @@ void main()	{
     float maxForce = texture2D(uLifeTexture, vec2(uv)).z;
 
     vec3 acceleration = vec3(0.0);
+
+    vec3 separation = separate(position, velocity, maxSpeed, maxForce, width, height);
+    acceleration += applyForce(separation, acceleration, maxForce);
+
+    vec3 alignment = align(position, velocity, maxSpeed, maxForce, width, height);
+    acceleration += applyForce(alignment, acceleration, maxForce);
+
+    vec3 cohesion = cohere(position, velocity, maxSpeed, maxForce, width, height);
+    acceleration += applyForce(cohesion, acceleration, maxForce);
+
+    float distanceToMouse = length(uMouse - position);
+    
+    if(distanceToMouse < 5.0) {
+        vec3 fleeForce = flee(uMouse, position, velocity, maxSpeed, maxForce);
+        fleeForce *= 1.2;
+        acceleration += applyForce(fleeForce, acceleration, maxForce);
+    }
     
     velocity = updateVelocity(acceleration, velocity, maxSpeed);
 
-    float distanceFromOrigin = length(position - uMouse);
-
-    if(distanceFromOrigin > lifespan) {
-        velocity = texture2D(uStartingVelocity, uv).xyz;
-    }
     
     gl_FragColor = vec4(velocity, 1.0);
 }
