@@ -8,7 +8,7 @@ import velocity from "./shaders/simulation/velocity.glsl"
 
 import vertex from "./shaders/particles/vertex.glsl"
 
-const WIDTH = 50
+const WIDTH = 40
 
 const maxSpeed = 1.0
 const maxForce = 0.5
@@ -43,14 +43,15 @@ const fillLifeSpanTexture = (width: number) =>
 const fillPositionTexture = (
   texture: THREE.DataTexture,
   width: number,
-  height: number
+  height: number,
+  depth: number
 ) => {
   const data = texture.image.data
 
   for (let i = 0; i < data.length; i += 4) {
     data[i + 0] = (Math.random() - 0.5) * width
     data[i + 1] = (Math.random() - 0.5) * height
-    data[i + 2] = 0
+    data[i + 2] = (Math.random() - 0.5) * depth
     data[i + 3] = 0
   }
 }
@@ -58,6 +59,7 @@ const fillPositionTexture = (
 const Sketch = () => {
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
   const { gl, viewport } = useThree()
+  const geoRef = useRef<THREE.ConeGeometry>(null!)
 
   const uniforms = useMemo(
     () =>
@@ -65,6 +67,7 @@ const Sketch = () => {
         THREE.ShaderLib["phong"].uniforms,
         {
           positionTexture: { value: null },
+          velocityTexture: { value: null },
         },
       ]),
     []
@@ -75,7 +78,7 @@ const Sketch = () => {
     const gpuRender = new GPUComputationRenderer(WIDTH, WIDTH, gl)
 
     const dataTexturePosition = gpuRender.createTexture()
-    fillPositionTexture(dataTexturePosition, viewport.width, viewport.height)
+    fillPositionTexture(dataTexturePosition, 20, 20, 20)
 
     const dataTextureVelocity = gpuRender.createTexture()
     createRandomVelocity(dataTextureVelocity)
@@ -140,7 +143,11 @@ const Sketch = () => {
     velocityTexture.wrapT = THREE.RepeatWrapping
 
     positionTexture.material.uniforms.uTextureSize = {
-      value: new THREE.Vector3(viewport.width, viewport.height, 5),
+      value: new THREE.Vector3(
+        viewport.width,
+        viewport.height,
+        Math.min(viewport.width, viewport.height)
+      ),
     }
 
     gpuRender.init()
@@ -176,6 +183,9 @@ const Sketch = () => {
     materialRef.current.uniforms.positionTexture.value =
       gpuCompute.getCurrentRenderTarget(positionTexture).texture
 
+    materialRef.current.uniforms.velocityTexture.value =
+      gpuCompute.getCurrentRenderTarget(velocityTexture).texture
+
     materialRef.current.uniformsNeedUpdate = true
   })
 
@@ -198,43 +208,37 @@ const Sketch = () => {
     // Defines
     material.defines.WIDTH = WIDTH.toFixed(1)
     material.defines.BOUNDS = WIDTH.toFixed(1)
+
+    geoRef.current.rotateZ(-Math.PI * 0.5)
   }, [materialRef])
 
   return (
-    <>
-      <mesh
-        receiveShadow
-        onPointerMove={(e) => {
-          velocityTexture.material.uniforms.uMouse.value = e.point
-        }}
-      >
-        <planeGeometry args={[viewport.width, viewport.height]} />
-        <meshBasicMaterial transparent opacity={0} />
-      </mesh>
-      <instancedMesh args={[undefined, undefined, WIDTH * WIDTH]}>
-        <boxGeometry args={[0.08, 0.08, 0.08]}>
-          <instancedBufferAttribute
-            attach='attributes-offset'
-            array={positions}
-            count={positions.length / 3}
-            itemSize={3}
-          />
-          <instancedBufferAttribute
-            attach='attributes-pIndex'
-            array={pIndex}
-            count={pIndex.length / 2}
-            itemSize={2}
-          />
-        </boxGeometry>
-        <shaderMaterial
-          ref={materialRef}
-          uniforms={uniforms}
-          vertexShader={vertex}
-          fragmentShader={THREE.ShaderChunk["meshphong_frag"]}
-          blending={THREE.AdditiveBlending}
+    <instancedMesh
+      args={[undefined, undefined, WIDTH * WIDTH]}
+      castShadow
+      receiveShadow
+    >
+      <coneGeometry ref={geoRef} args={[0.2, 0.8, 3, 1]}>
+        <instancedBufferAttribute
+          attach='attributes-offset'
+          array={positions}
+          count={positions.length / 3}
+          itemSize={3}
         />
-      </instancedMesh>
-    </>
+        <instancedBufferAttribute
+          attach='attributes-pIndex'
+          array={pIndex}
+          count={pIndex.length / 2}
+          itemSize={2}
+        />
+      </coneGeometry>
+      <shaderMaterial
+        ref={materialRef}
+        uniforms={uniforms}
+        vertexShader={vertex}
+        fragmentShader={THREE.ShaderChunk["meshphong_frag"]}
+      />
+    </instancedMesh>
   )
 }
 

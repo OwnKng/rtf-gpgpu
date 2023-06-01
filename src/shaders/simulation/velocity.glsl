@@ -237,14 +237,17 @@ void main()	{
     vec3 cohesion = cohere(position, velocity, maxSpeed, maxForce, width, height);
     acceleration += applyForce(cohesion, acceleration, maxForce);
 
-    float distanceToMouse = length(uMouse - position);
-    
-    if(distanceToMouse < 5.0) {
-        vec3 fleeForce = flee(uMouse, position, velocity, maxSpeed, maxForce);
-        fleeForce *= 1.2;
-        acceleration += applyForce(fleeForce, acceleration, maxForce);
+    vec3 target = vec3(0.0, 0.0, 0.0);
+    // get distance to center
+    float distanceToCenter = length(position);
+    float r = 10.0; 
+
+    if(distanceToCenter > r) {
+        vec3 seekForce = seek(target, position, velocity, true, maxSpeed, maxForce);
+        acceleration += applyForce(seekForce, acceleration, maxForce);
     }
-    
+
+
     velocity = updateVelocity(acceleration, velocity, maxSpeed);
 
     
