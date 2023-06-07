@@ -8,10 +8,19 @@ import velocity from "./shaders/simulation/velocity.glsl"
 
 import vertex from "./shaders/particles/vertex.glsl"
 
-const WIDTH = 40
+const WIDTH = 50
 
 const maxSpeed = 1.0
 const maxForce = 0.5
+
+const tempColor = new THREE.Color()
+const colorArray = Float32Array.from(
+  new Array(WIDTH * WIDTH)
+    .fill(0)
+    .flatMap((_, i) => tempColor.set(0xff6f59).toArray())
+)
+
+const predators = [new THREE.Vector3(0, 0, 10), new THREE.Vector3(0, 5, 0)]
 
 const startingVelocity = new Array(WIDTH * WIDTH)
   .fill(0)
@@ -59,7 +68,7 @@ const fillPositionTexture = (
 const Sketch = () => {
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
   const { gl, viewport } = useThree()
-  const geoRef = useRef<THREE.ConeGeometry>(null!)
+  const meshRef = useRef<THREE.InstancedMesh>(null!)
 
   const uniforms = useMemo(
     () =>
@@ -142,6 +151,10 @@ const Sketch = () => {
     velocityTexture.wrapS = THREE.RepeatWrapping
     velocityTexture.wrapT = THREE.RepeatWrapping
 
+    velocityTexture.material.uniforms.predators = {
+      value: [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 5, 0)],
+    }
+
     positionTexture.material.uniforms.uTextureSize = {
       value: new THREE.Vector3(
         viewport.width,
@@ -151,7 +164,6 @@ const Sketch = () => {
     }
 
     gpuRender.init()
-
     return [gpuRender, positionTexture, velocityTexture]
   }, [gl, viewport])
 
@@ -193,7 +205,7 @@ const Sketch = () => {
     const material = materialRef.current
 
     material.lights = true
-    material.color = new THREE.Color(0x42b6f5)
+    material.color = new THREE.Color(0xffffff)
     material.specular = new THREE.Color(0x111111)
     material.shininess = 100
 
@@ -209,36 +221,49 @@ const Sketch = () => {
     material.defines.WIDTH = WIDTH.toFixed(1)
     material.defines.BOUNDS = WIDTH.toFixed(1)
 
-    geoRef.current.rotateZ(-Math.PI * 0.5)
+    meshRef.current.geometry.rotateZ(-Math.PI * 0.5)
   }, [materialRef])
 
   return (
-    <instancedMesh
-      args={[undefined, undefined, WIDTH * WIDTH]}
-      castShadow
-      receiveShadow
-    >
-      <coneGeometry ref={geoRef} args={[0.2, 0.8, 3, 1]}>
-        <instancedBufferAttribute
-          attach='attributes-offset'
-          array={positions}
-          count={positions.length / 3}
-          itemSize={3}
+    <>
+      {predators.map((predator, i) => (
+        <group position={[predator.x, predator.y, predator.z]} key={i}>
+          <pointLight intensity={2} />
+        </group>
+      ))}
+      <instancedMesh
+        args={[undefined, undefined, WIDTH * WIDTH]}
+        castShadow
+        receiveShadow
+        ref={meshRef}
+      >
+        <boxGeometry args={[0.4, 1.1, 0.4]}>
+          <instancedBufferAttribute
+            attach='attributes-offset'
+            array={positions}
+            count={positions.length / 3}
+            itemSize={3}
+          />
+          <instancedBufferAttribute
+            attach='attributes-pIndex'
+            array={pIndex}
+            count={pIndex.length / 2}
+            itemSize={2}
+          />
+          <instancedBufferAttribute
+            attach='attributes-color'
+            args={[colorArray, 3]}
+          />
+        </boxGeometry>
+        <shaderMaterial
+          ref={materialRef}
+          uniforms={uniforms}
+          vertexShader={vertex}
+          fragmentShader={THREE.ShaderChunk["meshphong_frag"]}
+          lights
         />
-        <instancedBufferAttribute
-          attach='attributes-pIndex'
-          array={pIndex}
-          count={pIndex.length / 2}
-          itemSize={2}
-        />
-      </coneGeometry>
-      <shaderMaterial
-        ref={materialRef}
-        uniforms={uniforms}
-        vertexShader={vertex}
-        fragmentShader={THREE.ShaderChunk["meshphong_frag"]}
-      />
-    </instancedMesh>
+      </instancedMesh>
+    </>
   )
 }
 

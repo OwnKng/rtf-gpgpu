@@ -1,7 +1,8 @@
-import { OrbitControls } from "@react-three/drei"
+import { useRef } from "react"
 import "./App.css"
 import Sketch from "./Sketch"
 import { Canvas } from "@react-three/fiber"
+import { useThree } from "@react-three/fiber"
 
 function App() {
   return (
@@ -10,15 +11,33 @@ function App() {
       <Canvas
         dpr={1}
         camera={{
-          position: [0, 5, 20],
+          position: [0, 0, 30],
         }}
+        shadows
       >
-        <ambientLight intensity={0.2} />
-        <pointLight position={[0, 10, 5]} intensity={1.0} />
-        <OrbitControls />
+        <ambientLight intensity={0.5} />
+        <Lighting />
         <Sketch />
       </Canvas>
     </div>
+  )
+}
+
+const Lighting = () => {
+  const ref = useRef<THREE.PointLight>(null!)
+  const { viewport } = useThree()
+
+  return (
+    <>
+      <pointLight position={[0, 0, 0]} intensity={1.0} ref={ref} />
+      <mesh
+        onPointerMove={(e) => ref.current.position.copy(e.point)}
+        position={[0, 0, 25]}
+      >
+        <planeGeometry args={[viewport.width, viewport.height, 1, 1]} />
+        <meshBasicMaterial transparent opacity={0} />
+      </mesh>
+    </>
   )
 }
 

@@ -4,6 +4,8 @@ uniform vec3 uMouse;
 uniform sampler2D uLifeTexture;
 uniform sampler2D uStartingVelocity;
 
+uniform vec3 predators[2];
+
 vec4 permute(vec4 x) {
     return mod(((x*34.0)+1.0)*x, 289.0);
 }
@@ -91,7 +93,7 @@ vec3 separate(vec3 position, vec3 velocity, float maxSpeed, float maxForce, floa
     vec3 sum = vec3(0.0);
 
     float count = 0.0;
-    float desiredSeparation = 0.5;
+    float desiredSeparation = 0.8;
 
     for(float y = 0.0; y < height; y++) {
         for(float x = 0.0; x < width; x++) {
@@ -240,16 +242,25 @@ void main()	{
     vec3 target = vec3(0.0, 0.0, 0.0);
     // get distance to center
     float distanceToCenter = length(position);
-    float r = 10.0; 
+    float r = 15.0; 
 
     if(distanceToCenter > r) {
         vec3 seekForce = seek(target, position, velocity, true, maxSpeed, maxForce);
         acceleration += applyForce(seekForce, acceleration, maxForce);
     }
 
+    // iterate through the predators positions, and apply a force to avoid them
+    for(int i = 0; i < 2; i++) {
+        vec3 predator = predators[i];
+        float distanceToPredator = length(position - predator);
+
+        if(distanceToPredator < 4.0) {
+            vec3 force = flee(predator, position, velocity, maxSpeed, maxForce);
+            force *= 10.0;
+            acceleration += applyForce(force, acceleration, maxForce);
+        }
+    }
 
     velocity = updateVelocity(acceleration, velocity, maxSpeed);
-
-    
     gl_FragColor = vec4(velocity, 1.0);
 }
