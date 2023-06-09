@@ -3,6 +3,7 @@ import "./App.css"
 import Sketch from "./Sketch"
 import { Canvas } from "@react-three/fiber"
 import { useThree } from "@react-three/fiber"
+import { OrbitControls } from "@react-three/drei"
 
 function App() {
   return (
@@ -16,8 +17,10 @@ function App() {
         shadows
       >
         <ambientLight intensity={0.5} />
-        <Lighting />
+
         <Sketch />
+        <OrbitControls />
+        <fog attach='fog' args={["#272730", 10, 50]} />
       </Canvas>
     </div>
   )

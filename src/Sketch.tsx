@@ -1,14 +1,15 @@
-import { useLayoutEffect, useMemo, useRef } from "react"
+import { useMemo, useRef } from "react"
 import { GPUComputationRenderer } from "three/examples/jsm/misc/GPUComputationRenderer.js"
 import { useFrame, useThree } from "@react-three/fiber"
 import * as THREE from "three"
 
 import position from "./shaders/simulation/position.glsl"
 import velocity from "./shaders/simulation/velocity.glsl"
+import fragment from "./shaders/particles/fragment.glsl"
 
 import vertex from "./shaders/particles/vertex.glsl"
 
-const WIDTH = 50
+const WIDTH = 80
 
 const maxSpeed = 1.0
 const maxForce = 0.5
@@ -20,7 +21,7 @@ const colorArray = Float32Array.from(
     .flatMap((_, i) => tempColor.set(0xff6f59).toArray())
 )
 
-const predators = [new THREE.Vector3(0, 0, 10), new THREE.Vector3(0, 5, 0)]
+const predators = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]
 
 const startingVelocity = new Array(WIDTH * WIDTH)
   .fill(0)
@@ -70,15 +71,14 @@ const Sketch = () => {
   const { gl, viewport } = useThree()
   const meshRef = useRef<THREE.InstancedMesh>(null!)
 
+  const lightRef = useRef<THREE.Group>(null!)
+
   const uniforms = useMemo(
-    () =>
-      THREE.UniformsUtils.merge([
-        THREE.ShaderLib["phong"].uniforms,
-        {
-          positionTexture: { value: null },
-          velocityTexture: { value: null },
-        },
-      ]),
+    () => ({
+      positionTexture: { value: null },
+      velocityTexture: { value: null },
+      uLightPosition: { value: new THREE.Vector3(0, 0, 0) },
+    }),
     []
   )
 
@@ -183,7 +183,7 @@ const Sketch = () => {
     []
   )
 
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock, gl, scene, camera }, delta) => {
     gpuCompute.compute()
 
     positionTexture.material.uniforms.uTime.value = clock.getElapsedTime()
@@ -199,45 +199,39 @@ const Sketch = () => {
       gpuCompute.getCurrentRenderTarget(velocityTexture).texture
 
     materialRef.current.uniformsNeedUpdate = true
+
+    lightRef.current.children[0].position.z =
+      Math.sin(clock.getElapsedTime()) * 20
+
+    velocityTexture.material.uniforms.predators.value = [
+      lightRef.current.children[0].position,
+      lightRef.current.children[1].position,
+    ]
+
+    materialRef.current.uniforms.uLightPosition.value =
+      lightRef.current.children[0].position
   })
-
-  useLayoutEffect(() => {
-    const material = materialRef.current
-
-    material.lights = true
-    material.color = new THREE.Color(0xffffff)
-    material.specular = new THREE.Color(0x111111)
-    material.shininess = 100
-
-    // Sets the uniforms with the material values
-    material.uniforms["diffuse"].value = material.color
-    material.uniforms["specular"].value = material.specular
-    material.uniforms["shininess"].value = Math.max(material.shininess, 1e-4)
-    material.uniforms["opacity"].value = material.opacity
-
-    material.needsUpdate = true
-
-    // Defines
-    material.defines.WIDTH = WIDTH.toFixed(1)
-    material.defines.BOUNDS = WIDTH.toFixed(1)
-
-    meshRef.current.geometry.rotateZ(-Math.PI * 0.5)
-  }, [materialRef])
 
   return (
     <>
-      {predators.map((predator, i) => (
-        <group position={[predator.x, predator.y, predator.z]} key={i}>
-          <pointLight intensity={2} />
-        </group>
-      ))}
-      <instancedMesh
-        args={[undefined, undefined, WIDTH * WIDTH]}
-        castShadow
-        receiveShadow
-        ref={meshRef}
-      >
-        <boxGeometry args={[0.4, 1.1, 0.4]}>
+      <group ref={lightRef}>
+        {predators.map((predator, i) => (
+          <pointLight
+            intensity={2}
+            color={"red"}
+            distance={50}
+            position={[predator.x, predator.y, predator.z]}
+            key={i}
+          >
+            <mesh>
+              <sphereBufferGeometry args={[0.3, 16, 16]} />
+              <meshPhongMaterial color='red' />
+            </mesh>
+          </pointLight>
+        ))}
+      </group>
+      <instancedMesh args={[undefined, undefined, WIDTH * WIDTH]} ref={meshRef}>
+        <boxGeometry args={[0.8, 0.2, 0.2]}>
           <instancedBufferAttribute
             attach='attributes-offset'
             array={positions}
@@ -259,8 +253,7 @@ const Sketch = () => {
           ref={materialRef}
           uniforms={uniforms}
           vertexShader={vertex}
-          fragmentShader={THREE.ShaderChunk["meshphong_frag"]}
-          lights
+          fragmentShader={fragment}
         />
       </instancedMesh>
     </>

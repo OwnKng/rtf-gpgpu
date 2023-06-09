@@ -1,45 +1,13 @@
-#define PHONG
 uniform sampler2D positionTexture;
 uniform sampler2D velocityTexture;
 attribute vec2 pIndex;
 attribute vec3 offset;
 
 varying vec3 vViewPosition;
-
-#include <common>
-#include <uv_pars_vertex>
-#include <displacementmap_pars_vertex>
-#include <envmap_pars_vertex>
-#include <color_pars_vertex>
-#include <fog_pars_vertex>
-#include <normal_pars_vertex>
-#include <morphtarget_pars_vertex>
-#include <skinning_pars_vertex>
-#include <shadowmap_pars_vertex>
-#include <logdepthbuf_pars_vertex>
-#include <clipping_planes_pars_vertex>
+varying vec3 vWorldPosition;
+varying vec3 vNormal; 
 
 void main() {
-
-	#include <uv_vertex>
-	#include <color_vertex>
-	#include <morphcolor_vertex>
-
-	#include <beginnormal_vertex>
-	#include <morphnormal_vertex>
-	#include <skinbase_vertex>
-	#include <skinnormal_vertex>
-	#include <defaultnormal_vertex>
-	#include <normal_vertex>
-
-	#include <begin_vertex>
-	#include <morphtarget_vertex>
-	#include <skinning_vertex>
-	#include <displacementmap_vertex>
-	#include <project_vertex>
-	#include <logdepthbuf_vertex>
-	#include <clipping_planes_vertex>
-
     vec3 tempPosition = texture2D(positionTexture, pIndex).xyz;
 	vec3 velocity = normalize(texture2D(velocityTexture, pIndex).xyz);
 
@@ -63,14 +31,11 @@ void main() {
 	newPositon = maty * matz * newPositon;
 	newPositon += tempPosition; 
 
-	
+	vec4 mvPosition = modelViewMatrix * vec4(newPositon, 1.0);
 	vViewPosition = - mvPosition.xyz;
-    mvPosition = modelViewMatrix * vec4(newPositon, 1.0);
 
-	#include <worldpos_vertex>
-	#include <envmap_vertex>
-	#include <shadowmap_vertex>
-	#include <fog_vertex>
+	vNormal = normalize(normalMatrix * normal);
 
+	vWorldPosition = newPositon;
     gl_Position = projectionMatrix * viewMatrix * vec4(newPositon, 1.0);
 }
